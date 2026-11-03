@@ -19,6 +19,7 @@ public final class MachOSigner {
     private let codeResourcesData: Data?
     private let cmsSigner: CMSSigner?
     private let options: CodeSigningOptions
+    private let pageSizeShiftOverride: UInt8?
 
     public init(
         binaryData: Data,
@@ -28,7 +29,8 @@ public final class MachOSigner {
         infoPlistData: Data?,
         codeResourcesData: Data?,
         cmsSigner: CMSSigner?,
-        options: CodeSigningOptions = []
+        options: CodeSigningOptions = [],
+        pageSizeShift: UInt8? = nil
     ) {
         self.binaryData = binaryData
         self.bundleIdentifier = bundleIdentifier
@@ -38,6 +40,7 @@ public final class MachOSigner {
         self.codeResourcesData = codeResourcesData
         self.cmsSigner = cmsSigner
         self.options = options
+        self.pageSizeShiftOverride = pageSizeShift
     }
 
 
@@ -154,7 +157,10 @@ public final class MachOSigner {
         let cputype = swap ? workingData.readUInt32(at: 4).byteSwapped : workingData.readUInt32(at: 4)
         let filetype = swap ? workingData.readUInt32(at: 12).byteSwapped : workingData.readUInt32(at: 12)
         let isExecutable = (filetype == CodeSigningConstants.MH_EXECUTE)
-        let pageSizeShift: UInt8 = (cputype == 0x0100000c || cputype == 12) ? 14 : 12
+        // Every signature iOS is known to accept for a mapped library pages at 4096 -- Xcode's own
+        // frameworks, ldid, and LiveContainer's zsign all say 12 -- while this class has been choosing
+        // 16384 for arm64, which is the macOS page size. Callers that sign for iOS can say so here.
+        let pageSizeShift: UInt8 = pageSizeShiftOverride ?? ((cputype == 0x0100000c || cputype == 12) ? 14 : 12)
 
         var linkeditCmdOffset: Int? = nil
         var linkeditFileOff: UInt64 = 0
